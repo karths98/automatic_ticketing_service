@@ -1,0 +1,27 @@
+# Copy this file to config.yaml and edit the events list.
+#
+# poll_interval_seconds: how often to re-check each event. Keep this polite
+#   (30-120s is plenty). This tool only watches a public page -- it does not
+#   bypass the queue, and hammering the site won't get you tickets faster.
+poll_interval_seconds: 60
+
+# Where to remember which events have already alerted (so you're notified once).
+state_file: state.json
+
+# Per-request network timeout.
+request_timeout_seconds: 20
+
+events:
+  - name: "Example Artist - Kuala Lumpur"
+    # Paste the real Live Nation Malaysia event URL here.
+    url: "https://www.livenation.my/event/EXAMPLE-EVENT-ID"
+    # What to wait for: on_sale (default) | not_yet | sold_out
+    watch_for: on_sale
+
+    # Optional: override the text-scan fallback keywords for this event.
+    # Detection prefers the page's embedded structured data; these only matter
+    # if that's absent. Phrases are matched case-insensitively.
+    # keywords:
+    #   on_sale: ["buy now", "find tickets"]
+    #   not_yet: ["sale starts", "presale"]
+    #   sold_out: ["sold out"]
