@@ -1,0 +1,33 @@
+[Unit]
+Description=Live Nation onsale monitor (Telegram alerts)
+Documentation=https://github.com/karths98/automatic_ticketing_service
+After=network-online.target
+Wants=network-online.target
+# Give up restarting if it fails 5 times within 5 minutes (e.g. bad config),
+# instead of hammering in a tight loop.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=ticketbot
+Group=ticketbot
+WorkingDirectory=/var/lib/ticketbot
+ExecStart=/opt/ticketbot/.venv/bin/python /opt/ticketbot/run.py \
+    --env-file /etc/ticketbot/.env \
+    run --config /etc/ticketbot/config.yaml
+Restart=on-failure
+RestartSec=10
+
+# --- Sandboxing: the service only needs to read its code/config and write state ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/ticketbot
+ProtectControlGroups=true
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target
