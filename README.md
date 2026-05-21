@@ -98,13 +98,77 @@ remembers what it's already alerted (in `state.json`) so it won't spam you.
 ### Running it somewhere persistent
 
 This needs to keep running to be useful, so run it on a machine that stays on — your own
-computer, a Raspberry Pi, or a small VPS. Two common patterns:
-
-- **Continuous:** `python run.py run` under `tmux`/`systemd`/`nohup`.
-- **Cron:** `*/2 * * * * cd /path/to/repo && python run.py check-once` (every 2 minutes).
+computer, a Raspberry Pi, a small VPS, or a **Proxmox LXC** (see below). For a quick-and-dirty
+run you can use `python run.py run` under `tmux`/`nohup`, but the supported deployment is the
+systemd service installed by `scripts/install.sh`.
 
 > Keep `poll_interval_seconds` reasonable (30–120s). Polling faster won't get you tickets any
 > sooner — the queue is what gates purchases — and it's rude to the site.
+
+## Run as a Proxmox LXC
+
+The tool ships with a systemd unit (`deploy/ticketbot.service`) and two install scripts.
+
+### Option A — let the script create the container for you (run on the Proxmox host)
+
+From a checkout of this repo **on your Proxmox VE node**:
+
+```bash
+bash scripts/proxmox-create-lxc.sh
+```
+
+This picks the next free container ID, downloads a Debian 12 template if needed, creates an
+unprivileged LXC (DHCP, 1 core / 512 MB / 4 GB by default), copies the app in, and runs the
+installer inside it. Override any default via environment variables, e.g.:
+
+```bash
+CTID=210 HOSTNAME=ticketbot MEMORY=512 DISK=4 STORAGE=local-lvm BRIDGE=vmbr0 \
+  bash scripts/proxmox-create-lxc.sh
+```
+
+When it finishes it prints the container's root password and the remaining steps.
+
+### Option B — install into an LXC you already created
+
+Create a Debian/Ubuntu LXC yourself (Proxmox UI → Create CT), then inside it:
+
+```bash
+apt-get update && apt-get install -y git
+git clone https://github.com/karths98/automatic_ticketing_service.git
+cd automatic_ticketing_service
+bash scripts/install.sh
+```
+
+### After installing (either option)
+
+The installer creates a `ticketbot` system user and lays things out like this:
+
+| Path | Purpose |
+|------|---------|
+| `/opt/ticketbot` | application code + Python virtualenv |
+| `/etc/ticketbot/.env` | Telegram token + chat id (mode 600) |
+| `/etc/ticketbot/config.yaml` | events to watch + poll settings |
+| `/var/lib/ticketbot/state.json` | which events have already alerted |
+
+Finish setup:
+
+```bash
+nano /etc/ticketbot/.env          # add TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID
+nano /etc/ticketbot/config.yaml   # add your event URL(s)
+
+# verify Telegram works:
+sudo -u ticketbot /opt/ticketbot/.venv/bin/python /opt/ticketbot/run.py \
+  --env-file /etc/ticketbot/.env test-telegram
+
+systemctl start ticketbot.service
+systemctl status ticketbot.service
+journalctl -u ticketbot.service -f   # live logs
+```
+
+The service is enabled on boot and restarts on failure. It runs until every watched event has
+fired its one alert, then exits cleanly; add more events to `config.yaml` and
+`systemctl restart ticketbot` to watch them. Re-running `scripts/install.sh` updates the code
+and dependencies while preserving your config, secrets, and state.
 
 ## Run the tests
 
@@ -126,4 +190,9 @@ ticketbot/
   monitor.py   # the poll -> detect -> notify loop
   cli.py       # `run` / `check-once` / `test-telegram`
 run.py         # entrypoint
+deploy/
+  ticketbot.service        # systemd unit
+scripts/
+  install.sh               # install as a systemd service (run inside the LXC)
+  proxmox-create-lxc.sh    # create the LXC + install (run on the Proxmox host)
 ```
